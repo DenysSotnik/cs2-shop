@@ -1,7 +1,7 @@
 const supabaseUrl = 'https://hbxobafjqjvsribpgthr.supabase.co';
 const supabaseKey = 'sb_publishable_-W6264GvoiQmNNCLhDvmRw_0F8vkKoS';
 
-let supabase;
+let supabaseClient = null;
 let store = {
     currentUser: JSON.parse(localStorage.getItem('cs2_currentUser')) || null,
     cart: JSON.parse(localStorage.getItem('cs2_cart')) || [],
@@ -20,8 +20,8 @@ const products = [
 ];
 
 function initSupabase() {
-    if (window.supabase && !supabase) {
-        supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+    if (window.supabase && !supabaseClient) {
+        supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
         console.log('Supabase initialized');
     }
 }
@@ -54,8 +54,8 @@ async function getUserIP() {
 }
 
 async function logActivity(action, details = '') {
-    if (!supabase) return;
-    await supabase.from('activity').insert([{
+    if (!supabaseClient) return;
+    await supabaseClient.from('activity').insert([{
         user_id: store.currentUser ? store.currentUser.id : null,
         action,
         details,
@@ -64,8 +64,8 @@ async function logActivity(action, details = '') {
 }
 
 async function updateLastLogin() {
-    if (!supabase || !store.currentUser) return;
-    await supabase
+    if (!supabaseClient || !store.currentUser) return;
+    await supabaseClient
         .from('users')
         .update({ last_login: new Date().toISOString() })
         .eq('id', store.currentUser.id);
@@ -234,11 +234,11 @@ async function checkout() {
         return;
     }
 
-    if (!supabase) return;
+    if (!supabaseClient) return;
 
     const total = store.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-    const { error } = await supabase.from('orders').insert([{
+    const { error } = await supabaseClient.from('orders').insert([{
         user_id: store.currentUser.id,
         items: store.cart,
         total,
@@ -261,11 +261,11 @@ async function checkout() {
 }
 
 async function renderUsersTable() {
-    if (!supabase) return;
+    if (!supabaseClient) return;
     const tbody = document.querySelector('#usersTable tbody');
     if (!tbody) return;
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
         .from('users')
         .select('*')
         .order('registered_at', { ascending: false });
@@ -292,11 +292,11 @@ async function renderUsersTable() {
 }
 
 async function renderOrdersTable() {
-    if (!supabase) return;
+    if (!supabaseClient) return;
     const tbody = document.querySelector('#ordersTable tbody');
     if (!tbody) return;
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
         .from('orders')
         .select('*')
         .order('order_date', { ascending: false });
@@ -318,11 +318,11 @@ async function renderOrdersTable() {
 }
 
 async function renderActivityLog() {
-    if (!supabase) return;
+    if (!supabaseClient) return;
     const logContainer = document.getElementById('activityLog');
     if (!logContainer) return;
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
         .from('activity')
         .select('*')
         .order('timestamp', { ascending: false })
@@ -353,9 +353,9 @@ async function renderAdminPanel() {
 }
 
 async function exportToCSV() {
-    if (!supabase) return;
+    if (!supabaseClient) return;
 
-    const { data: users } = await supabase.from('users').select('*');
+    const { data: users } = await supabaseClient.from('users').select('*');
 
     if (!users || users.length === 0) {
         alert('Нет данных для экспорта');
@@ -409,7 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('signupForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        if (!supabase) {
+        if (!supabaseClient) {
             alert('Ошибка подключения');
             return;
         }
@@ -456,7 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const { data: existing } = await supabase
+        const { data: existing } = await supabaseClient
             .from('users')
             .select('id')
             .eq('email', email)
@@ -469,7 +469,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const userIp = await getUserIP();
 
-        const { error } = await supabase.from('users').insert([{
+        const { error } = await supabaseClient.from('users').insert([{
             name,
             email,
             password_hash: hashPassword(password),
@@ -496,7 +496,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        if (!supabase) {
+        if (!supabaseClient) {
             alert('Ошибка подключения');
             return;
         }
@@ -504,7 +504,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const email = document.getElementById('loginEmail').value.trim();
         const password = document.getElementById('loginPassword').value;
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('users')
             .select('*')
             .eq('email', email)
@@ -532,7 +532,6 @@ document.addEventListener('DOMContentLoaded', () => {
         closeAuthModal();
         await updateLastLogin();
         await logActivity('Вход', `Вход пользователя ${email}`);
-
         alert(`Добро пожаловать, ${user.name}!`);
         document.getElementById('loginForm').reset();
     });
