@@ -53,6 +53,14 @@ async function logActivity(action, details = '') {
     }]);
 }
 
+async function updateLastLogin() {
+    if (!supabase || !store.currentUser) return;
+    await supabase
+        .from('users')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', store.currentUser.id);
+}
+
 function switchTab(tab) {
     document.getElementById('loginTab').classList.remove('active');
     document.getElementById('signupTab').classList.remove('active');
@@ -262,10 +270,24 @@ async function renderUsersTable() {
             <td>${user.id}</td>
             <td>${user.name}</td>
             <td>${user.email}</td>
+            <td>${user.phone || '-'}</td>
+            <td>${user.address || '-'}</td>
             <td>${new Date(user.registered_at).toLocaleString('ru-RU')}</td>
+            <td>${user.last_login ? new Date(user.last_login).toLocaleString('ru-RU') : 'Никогда'}</td>
             <td><span class="status-badge status-${user.status === 'active' ? 'active' : 'inactive'}">${user.status === 'active' ? 'АКТИВНЫЙ' : 'ЗАБЛОКИРОВАН'}</span></td>
         </tr>
     `).join('');
+}
+
+async function getUserOrders(userId) {
+    if (!supabase) return [];
+    const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('user_id', userId)
+        .order('order_date', { ascending: false });
+    
+    return error ? [] : (data || []);
 }
 
 async function renderOrdersTable() {
@@ -323,7 +345,73 @@ async function renderActivityLog() {
     `).join('');
 }
 
+async function renderAnalytics() {
+    if (!supabase) return;
+    const analyticsContainer = document.getElementById('analyticsContainer');
+    if (!analyticsContainer) return;
+
+    const { data: users } = await supabase.from('users').select('id');
+    const { data: orders } = await supabase.from('orders').select('total');
+
+    const totalUsers = users ? users.length : 0;
+    const totalOrders = orders ? orders.length : 0;
+    const totalRevenue = orders ? orders.reduce((sum, o) => sum + Number(o.total), 0) : 0;
+    const avgOrder = totalOrders > 0 ? (totalRevenue / totalOrders).toFixed(2) : 0;
+
+    analyticsContainer.innerHTML = `
+        <div class="analytics-grid">
+            <div class="analytics-card">
+                <div class="analytics-label">Всего пользователей</div>
+                <div class="analytics-value">${totalUsers}</div>
+            </div>
+            <div class="analytics-card">
+                <div class="analytics-label">Всего заказов</div>
+                <div class="analytics-value">${totalOrders}</div>
+            </div>
+            <div class="analytics-card">
+                <div class="analytics-label">Общая выручка</div>
+                <div class="analytics-value">$${totalRevenue.toFixed(2)}</div>
+            </div>
+            <div class="analytics-card">
+                <div class="analytics-label">Средний чек</div>
+                <div class="analytics-value">$${avgOrder}</div>
+            </div>
+        </div>
+        <button class="export-btn" onclick="exportToCSV()">📥 Экспортировать в CSV</button>
+    `;
+}
+
+async function exportToCSV() {
+    if (!supabase) return;
+
+    const { data: users } = await supabase.from('users').select('*');
+    
+    if (!users || users.length === 0) {
+        alert('Нет данных для экспорта');
+        return;
+    }
+
+    let csv = 'ID,Имя,Email,Телефон,Адрес,Дата регистрации,Последний вход,Статус\n';
+    
+    users.forEach(user => {
+        csv += `${user.id},"${user.name}","${user.email}","${user.phone || ''}","${user.address || ''}","${new Date(user.registered_at).toLocaleString('ru-RU')}","${user.last_login ? new Date(user.last_login).toLocaleString('ru-RU') : 'Никогда'}","${user.status}"\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `users_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
 async function renderAdminPanel() {
+    await renderAnalytics();
     await renderUsersTable();
     await renderOrdersTable();
     await renderActivityLog();
@@ -367,6 +455,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const email = document.getElementById('signupEmail').value.trim();
         const password = document.getElementById('signupPassword').value;
         const confirmPassword = document.getElementById('signupConfirmPassword').value;
+        const phone = document.getElementById('signupPhone') ? document.getElementById('signupPhone').value.trim() : '';
+        const address = document.getElementById('signupAddress') ? document.getElementById('signupAddress').value.trim() : '';
 
         if (!name || name.length < 2) {
             alert('Имя должно быть минимум 2 символа');
@@ -408,8 +498,11 @@ document.addEventListener('DOMContentLoaded', () => {
             name,
             email,
             password_hash: hashPassword(password),
+            phone: phone || null,
+            address: address || null,
             status: 'active',
-            registered_at: new Date().toISOString()
+            registered_at: new Date().toISOString(),
+            last_login: null
         }]);
 
         if (error) {
@@ -460,6 +553,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateAuthButton();
         updateAdminButton();
         closeAuthModal();
+        await updateLastLogin();
         await logActivity('Вход', `Вход пользователя ${email}`);
         alert(`Добро пожаловать, ${user.name}!`);
         document.getElementById('loginForm').reset();
