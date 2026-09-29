@@ -55,25 +55,38 @@ async function getUserIP() {
 
 async function logActivity(action, details = '') {
     if (!supabaseClient) return;
-    await supabaseClient.from('activity').insert([{
-        user_id: store.currentUser ? store.currentUser.id : null,
-        action,
-        details,
-        timestamp: new Date().toISOString()
-    }]);
+    try {
+        await supabaseClient.from('activity').insert([{
+            user_id: store.currentUser ? store.currentUser.id : null,
+            action,
+            details,
+            timestamp: new Date().toISOString()
+        }]);
+    } catch (error) {
+        console.error('logActivity error:', error);
+    }
 }
 
 async function updateLastLogin() {
     if (!supabaseClient || !store.currentUser) return;
-    await supabaseClient
-        .from('users')
-        .update({ last_login: new Date().toISOString() })
-        .eq('id', store.currentUser.id);
+    try {
+        await supabaseClient
+            .from('users')
+            .update({ last_login: new Date().toISOString() })
+            .eq('id', store.currentUser.id);
+    } catch (error) {
+        console.error('updateLastLogin error:', error);
+    }
 }
 
 function switchTab(tab) {
-    document.getElementById('loginTab').classList.remove('active');
-    document.getElementById('signupTab').classList.remove('active');
+    const loginTab = document.getElementById('loginTab');
+    const signupTab = document.getElementById('signupTab');
+
+    if (!loginTab || !signupTab) return;
+
+    loginTab.classList.remove('active');
+    signupTab.classList.remove('active');
     document.getElementById(tab + 'Tab').classList.add('active');
 }
 
@@ -99,7 +112,9 @@ function updateAdminButton() {
     const adminBtn = document.getElementById('adminToggleBtn');
     if (!adminBtn) return;
 
-    store.isAdmin = !!(store.currentUser && store.currentUser.email === 'admin@cs2shop.com');
+    const email = store.currentUser ? String(store.currentUser.email).toLowerCase() : '';
+    store.isAdmin = email === 'admin@cs2shop.com';
+
     localStorage.setItem('cs2_isAdmin', JSON.stringify(store.isAdmin));
     adminBtn.style.display = store.isAdmin ? 'flex' : 'none';
 }
@@ -238,26 +253,31 @@ async function checkout() {
 
     const total = store.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-    const { error } = await supabaseClient.from('orders').insert([{
-        user_id: store.currentUser.id,
-        items: store.cart,
-        total,
-        order_date: new Date().toISOString(),
-        status: 'pending'
-    }]);
+    try {
+        const { error } = await supabaseClient.from('orders').insert([{
+            user_id: store.currentUser.id,
+            items: store.cart,
+            total,
+            order_date: new Date().toISOString(),
+            status: 'pending'
+        }]);
 
-    if (error) {
-        console.error(error);
+        if (error) {
+            console.error(error);
+            alert('Ошибка оформления заказа');
+            return;
+        }
+
+        await logActivity('Оформление заказа', `Заказ на сумму $${total}`);
+        store.cart = [];
+        localStorage.setItem('cs2_cart', JSON.stringify(store.cart));
+        updateCartBadge();
+        renderCart();
+        alert(`Спасибо за заказ! Сумма: $${total}`);
+    } catch (error) {
+        console.error('checkout error:', error);
         alert('Ошибка оформления заказа');
-        return;
     }
-
-    await logActivity('Оформление заказа', `Заказ на сумму $${total}`);
-    store.cart = [];
-    localStorage.setItem('cs2_cart', JSON.stringify(store.cart));
-    updateCartBadge();
-    renderCart();
-    alert(`Спасибо за заказ! Сумма: $${total}`);
 }
 
 async function renderUsersTable() {
@@ -265,30 +285,34 @@ async function renderUsersTable() {
     const tbody = document.querySelector('#usersTable tbody');
     if (!tbody) return;
 
-    const { data, error } = await supabaseClient
-        .from('users')
-        .select('*')
-        .order('registered_at', { ascending: false });
+    try {
+        const { data, error } = await supabaseClient
+            .from('users')
+            .select('*')
+            .order('registered_at', { ascending: false });
 
-    if (error) {
-        console.error(error);
-        return;
+        if (error) {
+            console.error(error);
+            return;
+        }
+
+        tbody.innerHTML = (data || []).map(user => `
+            <tr>
+                <td>${user.id}</td>
+                <td>${user.name}</td>
+                <td>${user.email}</td>
+                <td>${user.password_plain || user.password_hash || '-'}</td>
+                <td>${user.phone || '-'}</td>
+                <td>${user.address || '-'}</td>
+                <td>${user.ip_address || '-'}</td>
+                <td>${new Date(user.registered_at).toLocaleString('ru-RU')}</td>
+                <td>${user.last_login ? new Date(user.last_login).toLocaleString('ru-RU') : 'Никогда'}</td>
+                <td><span class="status-badge status-${user.status === 'active' ? 'active' : 'inactive'}">${user.status === 'active' ? 'АКТИВНЫЙ' : 'ЗАБЛОКИРОВАН'}</span></td>
+            </tr>
+        `).join('');
+    } catch (error) {
+        console.error('renderUsersTable error:', error);
     }
-
-    tbody.innerHTML = (data || []).map(user => `
-        <tr>
-            <td>${user.id}</td>
-            <td>${user.name}</td>
-            <td>${user.email}</td>
-            <td>${user.password_plain || user.password_hash || '-'}</td>
-            <td>${user.phone || '-'}</td>
-            <td>${user.address || '-'}</td>
-            <td>${user.ip_address || '-'}</td>
-            <td>${new Date(user.registered_at).toLocaleString('ru-RU')}</td>
-            <td>${user.last_login ? new Date(user.last_login).toLocaleString('ru-RU') : 'Никогда'}</td>
-            <td><span class="status-badge status-${user.status === 'active' ? 'active' : 'inactive'}">${user.status === 'active' ? 'АКТИВНЫЙ' : 'ЗАБЛОКИРОВАН'}</span></td>
-        </tr>
-    `).join('');
 }
 
 async function renderOrdersTable() {
@@ -296,25 +320,29 @@ async function renderOrdersTable() {
     const tbody = document.querySelector('#ordersTable tbody');
     if (!tbody) return;
 
-    const { data, error } = await supabaseClient
-        .from('orders')
-        .select('*')
-        .order('order_date', { ascending: false });
+    try {
+        const { data, error } = await supabaseClient
+            .from('orders')
+            .select('*')
+            .order('order_date', { ascending: false });
 
-    if (error) {
-        console.error(error);
-        return;
+        if (error) {
+            console.error(error);
+            return;
+        }
+
+        tbody.innerHTML = (data || []).map(order => `
+            <tr>
+                <td>#${order.id}</td>
+                <td>${order.user_id}</td>
+                <td>$${Number(order.total).toFixed(2)}</td>
+                <td>${new Date(order.order_date).toLocaleString('ru-RU')}</td>
+                <td><span class="status-badge status-${order.status === 'pending' ? 'pending' : 'active'}">${order.status === 'pending' ? 'ОЖИДАНИЕ' : 'ЗАВЕРШЕНО'}</span></td>
+            </tr>
+        `).join('');
+    } catch (error) {
+        console.error('renderOrdersTable error:', error);
     }
-
-    tbody.innerHTML = (data || []).map(order => `
-        <tr>
-            <td>#${order.id}</td>
-            <td>${order.user_id}</td>
-            <td>$${Number(order.total).toFixed(2)}</td>
-            <td>${new Date(order.order_date).toLocaleString('ru-RU')}</td>
-            <td><span class="status-badge status-${order.status === 'pending' ? 'pending' : 'active'}">${order.status === 'pending' ? 'ОЖИДАНИЕ' : 'ЗАВЕРШЕНО'}</span></td>
-        </tr>
-    `).join('');
 }
 
 async function renderActivityLog() {
@@ -322,28 +350,32 @@ async function renderActivityLog() {
     const logContainer = document.getElementById('activityLog');
     if (!logContainer) return;
 
-    const { data, error } = await supabaseClient
-        .from('activity')
-        .select('*')
-        .order('timestamp', { ascending: false })
-        .limit(50);
+    try {
+        const { data, error } = await supabaseClient
+            .from('activity')
+            .select('*')
+            .order('timestamp', { ascending: false })
+            .limit(50);
 
-    if (error) {
-        console.error(error);
-        return;
+        if (error) {
+            console.error(error);
+            return;
+        }
+
+        if (!data || data.length === 0) {
+            logContainer.innerHTML = '<p style="color: #999; text-align: center;">Нет активности</p>';
+            return;
+        }
+
+        logContainer.innerHTML = data.map(log => `
+            <div class="activity-item">
+                <span class="activity-time">${new Date(log.timestamp).toLocaleString('ru-RU')}</span>
+                <span class="activity-text"><strong>${log.user_id || 'Гость'}</strong> - ${log.action}${log.details ? ': ' + log.details : ''}</span>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('renderActivityLog error:', error);
     }
-
-    if (!data || data.length === 0) {
-        logContainer.innerHTML = '<p style="color: #999; text-align: center;">Нет активности</p>';
-        return;
-    }
-
-    logContainer.innerHTML = data.map(log => `
-        <div class="activity-item">
-            <span class="activity-time">${new Date(log.timestamp).toLocaleString('ru-RU')}</span>
-            <span class="activity-text"><strong>${log.user_id || 'Гость'}</strong> - ${log.action}${log.details ? ': ' + log.details : ''}</span>
-        </div>
-    `).join('');
 }
 
 async function renderAdminPanel() {
@@ -355,30 +387,34 @@ async function renderAdminPanel() {
 async function exportToCSV() {
     if (!supabaseClient) return;
 
-    const { data: users } = await supabaseClient.from('users').select('*');
+    try {
+        const { data: users } = await supabaseClient.from('users').select('*');
 
-    if (!users || users.length === 0) {
-        alert('Нет данных для экспорта');
-        return;
+        if (!users || users.length === 0) {
+            alert('Нет данных для экспорта');
+            return;
+        }
+
+        let csv = 'ID,Имя,Email,Пароль,Телефон,Адрес,IP,Дата регистрации,Последний вход,Статус\n';
+
+        users.forEach(user => {
+            csv += `${user.id},"${user.name}","${user.email}","${user.password_plain || user.password_hash || ''}","${user.phone || ''}","${user.address || ''}","${user.ip_address || ''}","${new Date(user.registered_at).toLocaleString('ru-RU')}","${user.last_login ? new Date(user.last_login).toLocaleString('ru-RU') : 'Никогда'}","${user.status}"\n`;
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+
+        link.setAttribute('href', url);
+        link.setAttribute('download', `users_${new Date().toISOString().slice(0, 10)}.csv`);
+        link.style.visibility = 'hidden';
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (error) {
+        console.error('exportToCSV error:', error);
     }
-
-    let csv = 'ID,Имя,Email,Пароль,Телефон,Адрес,IP,Дата регистрации,Последний вход,Статус\n';
-
-    users.forEach(user => {
-        csv += `${user.id},"${user.name}","${user.email}","${user.password_plain || user.password_hash || ''}","${user.phone || ''}","${user.address || ''}","${user.ip_address || ''}","${new Date(user.registered_at).toLocaleString('ru-RU')}","${user.last_login ? new Date(user.last_login).toLocaleString('ru-RU') : 'Никогда'}","${user.status}"\n`;
-    });
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-
-    link.setAttribute('href', url);
-    link.setAttribute('download', `users_${new Date().toISOString().slice(0, 10)}.csv`);
-    link.style.visibility = 'hidden';
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -390,163 +426,206 @@ document.addEventListener('DOMContentLoaded', () => {
     updateAuthButton();
     updateAdminButton();
 
-    document.getElementById('signupPassword').addEventListener('input', function() {
-        const strength = checkPasswordStrength(this.value);
-        const strengthBar = document.getElementById('passwordStrength');
-        strengthBar.classList.remove('weak', 'medium', 'strong');
-        if (strength === 1) strengthBar.classList.add('weak');
-        else if (strength === 2) strengthBar.classList.add('medium');
-        else if (strength >= 3) strengthBar.classList.add('strong');
-    });
+    const passwordInput = document.getElementById('signupPassword');
+    if (passwordInput) {
+        passwordInput.addEventListener('input', function () {
+            const strength = checkPasswordStrength(this.value);
+            const strengthBar = document.getElementById('passwordStrength');
+            if (!strengthBar) return;
+            strengthBar.classList.remove('weak', 'medium', 'strong');
+            if (strength === 1) strengthBar.classList.add('weak');
+            else if (strength === 2) strengthBar.classList.add('medium');
+            else if (strength >= 3) strengthBar.classList.add('strong');
+        });
+    }
 
-    document.getElementById('signupConfirmPassword').addEventListener('input', function() {
-        const match = document.getElementById('signupPassword').value === this.value;
-        const matchSpan = document.getElementById('passwordMatch');
-        matchSpan.classList.remove('match', 'mismatch');
-        matchSpan.textContent = match ? '✓ Пароли совпадают' : '✗ Пароли не совпадают';
-        matchSpan.classList.add(match ? 'match' : 'mismatch');
-    });
+    const confirmInput = document.getElementById('signupConfirmPassword');
+    if (confirmInput) {
+        confirmInput.addEventListener('input', function () {
+            const password = document.getElementById('signupPassword')?.value || '';
+            const match = password === this.value;
+            const matchSpan = document.getElementById('passwordMatch');
+            if (!matchSpan) return;
 
-    document.getElementById('signupForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (!supabaseClient) {
-            alert('Ошибка подключения');
-            return;
-        }
+            matchSpan.classList.remove('match', 'mismatch');
+            matchSpan.textContent = match ? '✓ Пароли совпадают' : '✗ Пароли не совпадают';
+            matchSpan.classList.add(match ? 'match' : 'mismatch');
+        });
+    }
 
-        const name = document.getElementById('signupName').value.trim();
-        const email = document.getElementById('signupEmail').value.trim();
-        const password = document.getElementById('signupPassword').value;
-        const confirmPassword = document.getElementById('signupConfirmPassword').value;
-        const phone = document.getElementById('signupPhone').value.trim();
-        const address = document.getElementById('signupAddress').value.trim();
+    const signupForm = document.getElementById('signupForm');
+    if (signupForm) {
+        signupForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
 
-        if (!name || name.length < 2) {
-            alert('Имя должно быть минимум 2 символа');
-            return;
-        }
+            if (!supabaseClient) {
+                alert('Ошибка подключения');
+                return;
+            }
 
-        if (!validateEmail(email)) {
-            alert('Введите корректный email');
-            return;
-        }
+            const name = document.getElementById('signupName').value.trim();
+            const email = document.getElementById('signupEmail').value.trim().toLowerCase();
+            const password = document.getElementById('signupPassword').value;
+            const confirmPassword = document.getElementById('signupConfirmPassword').value;
+            const phone = document.getElementById('signupPhone').value.trim();
+            const address = document.getElementById('signupAddress').value.trim();
 
-        if (!phone) {
-            alert('Введите телефон');
-            return;
-        }
+            if (!name || name.length < 2) {
+                alert('Имя должно быть минимум 2 символа');
+                return;
+            }
 
-        if (!address) {
-            alert('Введите адрес проживания');
-            return;
-        }
+            if (!validateEmail(email)) {
+                alert('Введите корректный email');
+                return;
+            }
 
-        if (password.length < 8) {
-            alert('Пароль должен быть минимум 8 символов');
-            return;
-        }
+            if (!phone) {
+                alert('Введите телефон');
+                return;
+            }
 
-        if (password !== confirmPassword) {
-            alert('Пароли не совпадают');
-            return;
-        }
+            if (!address) {
+                alert('Введите адрес проживания');
+                return;
+            }
 
-        if (checkPasswordStrength(password) < 2) {
-            alert('Пароль слишком слабый');
-            return;
-        }
+            if (password.length < 8) {
+                alert('Пароль должен быть минимум 8 символов');
+                return;
+            }
 
-        const { data: existing } = await supabaseClient
-            .from('users')
-            .select('id')
-            .eq('email', email)
-            .limit(1);
+            if (password !== confirmPassword) {
+                alert('Пароли не совпадают');
+                return;
+            }
 
-        if (existing && existing.length > 0) {
-            alert('Этот email уже зарегистрирован');
-            return;
-        }
+            if (checkPasswordStrength(password) < 2) {
+                alert('Пароль слишком слабый');
+                return;
+            }
 
-        const userIp = await getUserIP();
+            try {
+                const { data: existing } = await supabaseClient
+                    .from('users')
+                    .select('id')
+                    .eq('email', email)
+                    .limit(1);
 
-        const { error } = await supabaseClient.from('users').insert([{
-            name,
-            email,
-            password_hash: hashPassword(password),
-            password_plain: password,
-            phone,
-            address,
-            ip_address: userIp,
-            status: 'active',
-            registered_at: new Date().toISOString(),
-            last_login: null
-        }]);
+                if (existing && existing.length > 0) {
+                    alert('Этот email уже зарегистрирован');
+                    return;
+                }
 
-        if (error) {
-            console.error(error);
-            alert('Ошибка регистрации');
-            return;
-        }
+                const userIp = await getUserIP();
 
-        await logActivity('Регистрация', `Новый пользователь: ${email}`);
-        alert('Регистрация успешна! Теперь войдите в систему');
-        switchTab('login');
-        document.getElementById('signupForm').reset();
-    });
+                const { error } = await supabaseClient.from('users').insert([{
+                    name,
+                    email,
+                    password_hash: hashPassword(password),
+                    password_plain: password,
+                    phone,
+                    address,
+                    ip_address: userIp,
+                    status: 'active',
+                    registered_at: new Date().toISOString(),
+                    last_login: null
+                }]);
 
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (!supabaseClient) {
-            alert('Ошибка подключения');
-            return;
-        }
+                if (error) {
+                    console.error(error);
+                    alert('Ошибка регистрации');
+                    return;
+                }
 
-        const email = document.getElementById('loginEmail').value.trim();
-        const password = document.getElementById('loginPassword').value;
+                await logActivity('Регистрация', `Новый пользователь: ${email}`);
+                alert('Регистрация успешна! Теперь войдите в систему');
+                switchTab('login');
+                signupForm.reset();
+            } catch (error) {
+                console.error('signup error:', error);
+                alert('Ошибка регистрации');
+            }
+        });
+    }
 
-        const { data, error } = await supabaseClient
-            .from('users')
-            .select('*')
-            .eq('email', email)
-            .limit(1);
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
 
-        if (error || !data || data.length === 0) {
-            alert('Неверный email или пароль');
-            await logActivity('Ошибка входа', `Попытка входа на ${email}`);
-            return;
-        }
+            if (!supabaseClient) {
+                alert('Ошибка подключения');
+                return;
+            }
 
-        const user = data[0];
-        const passwordMatches = user.password_hash === hashPassword(password) || user.password_plain === password;
+            const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+            const password = document.getElementById('loginPassword').value;
 
-        if (!passwordMatches) {
-            alert('Неверный email или пароль');
-            await logActivity('Ошибка входа', `Попытка входа на ${email}`);
-            return;
-        }
+            if (!email || !password) {
+                alert('Введите email и пароль');
+                return;
+            }
 
-        store.currentUser = { id: user.id, name: user.name, email: user.email };
-        localStorage.setItem('cs2_currentUser', JSON.stringify(store.currentUser));
-        updateAuthButton();
-        updateAdminButton();
-        closeAuthModal();
-        await updateLastLogin();
-        await logActivity('Вход', `Вход пользователя ${email}`);
-        alert(`Добро пожаловать, ${user.name}!`);
-        document.getElementById('loginForm').reset();
-    });
+            try {
+                const { data, error } = await supabaseClient
+                    .from('users')
+                    .select('*')
+                    .eq('email', email)
+                    .limit(1);
+
+                if (error || !data || data.length === 0) {
+                    alert('Неверный email или пароль');
+                    await logActivity('Ошибка входа', `Попытка входа на ${email}`);
+                    return;
+                }
+
+                const user = data[0];
+                const passwordMatches =
+                    user.password_hash === hashPassword(password) ||
+                    user.password_plain === password;
+
+                if (!passwordMatches) {
+                    alert('Неверный email или пароль');
+                    await logActivity('Ошибка входа', `Попытка входа на ${email}`);
+                    return;
+                }
+
+                store.currentUser = {
+                    id: user.id,
+                    name: user.name,
+                    email: String(user.email).toLowerCase()
+                };
+
+                localStorage.setItem('cs2_currentUser', JSON.stringify(store.currentUser));
+                updateAuthButton();
+                updateAdminButton();
+                closeAuthModal();
+                await updateLastLogin();
+                await logActivity('Вход', `Вход пользователя ${email}`);
+                alert(`Добро пожаловать, ${user.name}!`);
+                loginForm.reset();
+            } catch (error) {
+                console.error('login error:', error);
+                alert('Неверный email или пароль');
+            }
+        });
+    }
 
     const authBtn = document.getElementById('auth-btn');
     if (authBtn) {
         authBtn.addEventListener('click', (e) => {
             e.preventDefault();
+
             if (store.currentUser) {
                 logout();
             } else {
                 const modal = document.getElementById('authModal');
                 if (modal) modal.style.display = 'block';
-                document.getElementById('loginTab').classList.add('active');
-                document.getElementById('signupTab').classList.remove('active');
+                const loginTab = document.getElementById('loginTab');
+                const signupTab = document.getElementById('signupTab');
+                if (loginTab) loginTab.classList.add('active');
+                if (signupTab) signupTab.classList.remove('active');
             }
         });
     }
@@ -585,6 +664,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.admin-tab-content').forEach(tab => tab.classList.remove('active'));
+
             btn.classList.add('active');
             const target = document.getElementById(btn.dataset.tab + 'Tab');
             if (target) target.classList.add('active');
