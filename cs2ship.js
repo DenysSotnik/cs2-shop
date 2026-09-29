@@ -1,4 +1,13 @@
 // ===== ТОВАРЫ =====
+const supabaseUrl = 'https://hbxobafjqjvsribpgthr.supabase.co';
+
+const supabaseKey =
+    'sb_publishable_-W6264GvoiQmNNCLhDvmRw_0F8vkKoS';
+
+const supabaseClient = window.supabase.createClient(
+    supabaseUrl,
+    supabaseKey
+);
 const products = [
     { id: 1, name: 'AWP Dragon Lore', price: 2500, description: 'Легендарный скин для снайперской винтовки', emoji: '🎯' },
     { id: 2, name: 'M4A1-S Knight', price: 1800, description: 'Элегантный дизайн для штурмовой винтовки', emoji: '⚔️' },
