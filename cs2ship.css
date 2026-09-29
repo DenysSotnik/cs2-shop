@@ -66,6 +66,7 @@ body {
     text-decoration: none;
     transition: all 0.3s ease;
     position: relative;
+    cursor: pointer;
 }
 
 .nav-link:hover {
@@ -93,11 +94,12 @@ body {
     height: 100%;
     background-color: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(5px);
+    overflow: hidden;
 }
 
 .modal-content {
     background-color: var(--cs2-darker);
-    margin: 10% auto;
+    margin: 5% auto;
     padding: 2rem;
     border: 2px solid var(--cs2-cyan);
     width: 90%;
@@ -105,6 +107,8 @@ body {
     border-radius: 10px;
     box-shadow: 0 0 30px rgba(0, 212, 255, 0.5);
     animation: slideIn 0.3s ease;
+    max-height: 85vh;
+    overflow-y: auto;
 }
 
 @keyframes slideIn {
@@ -183,9 +187,17 @@ body {
     background-color: #333;
 }
 
-.password-strength.weak { background-color: var(--cs2-red); }
-.password-strength.medium { background-color: var(--cs2-orange); }
-.password-strength.strong { background-color: var(--cs2-gold); }
+.password-strength.weak {
+    background-color: var(--cs2-red);
+}
+
+.password-strength.medium {
+    background-color: var(--cs2-orange);
+}
+
+.password-strength.strong {
+    background-color: var(--cs2-gold);
+}
 
 .password-match {
     font-size: 0.8rem;
@@ -193,8 +205,13 @@ body {
     display: block;
 }
 
-.password-match.match { color: var(--cs2-gold); }
-.password-match.mismatch { color: var(--cs2-red); }
+.password-match.match {
+    color: var(--cs2-gold);
+}
+
+.password-match.mismatch {
+    color: var(--cs2-red);
+}
 
 .tab-switch {
     text-align: center;
@@ -772,6 +789,7 @@ body {
 
     .modal-content {
         width: 95%;
+        margin: 20% auto;
     }
 }
 
