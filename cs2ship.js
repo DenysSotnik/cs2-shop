@@ -1,12 +1,12 @@
 const supabaseUrl = 'https://hbxobafjqjvsribpgthr.supabase.co';
 const supabaseKey = 'sb_publishable_-W6264GvoiQmNNCLhDvmRw_0F8vkKoS';
-const ADMIN_EMAIL = 'admin@cs2shop.com';
 
-if (!window.supabase) {
-    console.error('Supabase script is not loaded. Add <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script> before cs2ship.js');
-}
-
-const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+let supabase;
+let store = {
+    currentUser: JSON.parse(localStorage.getItem('cs2_currentUser')) || null,
+    cart: JSON.parse(localStorage.getItem('cs2_cart')) || [],
+    isAdmin: JSON.parse(localStorage.getItem('cs2_isAdmin')) || false
+};
 
 const products = [
     { id: 1, name: 'AWP Dragon Lore', price: 2500, description: 'Легендарный скин для снайперской винтовки', emoji: '🎯' },
@@ -19,22 +19,19 @@ const products = [
     { id: 8, name: 'AWP Containment Breach', price: 1500, description: 'Эксклюзивный скин для снайперски винтовки', emoji: '🔒' }
 ];
 
-const store = {
-    users: [],
-    currentUser: JSON.parse(localStorage.getItem('cs2_currentUser')) || null,
-    cart: JSON.parse(localStorage.getItem('cs2_cart')) || [],
-    orders: [],
-    activityLog: [],
-    isAdmin: false
-};
+function initSupabase() {
+    if (window.supabase && !supabase) {
+        supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        console.log('Supabase initialized');
+    }
+}
 
 function hashPassword(password) {
     return btoa(password);
 }
 
 function validateEmail(email) {
-    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return regex.test(email);
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 function checkPasswordStrength(password) {
@@ -46,79 +43,31 @@ function checkPasswordStrength(password) {
     return strength;
 }
 
-async function loadUsers() {
-    const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('registered_at', { ascending: false });
-
-    if (error) {
-        console.error('loadUsers error:', error);
-        return;
-    }
-
-    store.users = data || [];
-}
-
-async function loadOrders() {
-    const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .order('order_date', { ascending: false });
-
-    if (error) {
-        console.error('loadOrders error:', error);
-        return;
-    }
-
-    store.orders = data || [];
-}
-
-async function loadActivity() {
-    const { data, error } = await supabase
-        .from('activity')
-        .select('*')
-        .order('timestamp', { ascending: false })
-        .limit(50);
-
-    if (error) {
-        console.error('loadActivity error:', error);
-        return;
-    }
-
-    store.activityLog = data || [];
-}
-
 async function logActivity(action, details = '') {
-    if (!store.currentUser) {
-        console.log('No current user; activity saved as guest');
-    }
-
-    const { error } = await supabase.from('activity').insert([
-        {
-            user_id: store.currentUser ? store.currentUser.id : null,
-            action,
-            details,
-            timestamp: new Date().toISOString()
-        }
-    ]);
-
-    if (error) {
-        console.error('logActivity error:', error);
-    }
+    if (!supabase) return;
+    await supabase.from('activity').insert([{
+        user_id: store.currentUser ? store.currentUser.id : null,
+        action,
+        details,
+        timestamp: new Date().toISOString()
+    }]);
 }
 
 function switchTab(tab) {
-    if (event) event.preventDefault();
     document.getElementById('loginTab').classList.remove('active');
     document.getElementById('signupTab').classList.remove('active');
     document.getElementById(tab + 'Tab').classList.add('active');
 }
 
+function closeAuthModal() {
+    const modal = document.getElementById('authModal');
+    if (modal) modal.style.display = 'none';
+}
+
 function updateAuthButton() {
     const authBtn = document.getElementById('auth-btn');
     if (!authBtn) return;
-
+    
     if (store.currentUser) {
         authBtn.textContent = `Выход (${store.currentUser.name})`;
         authBtn.style.color = '#00d4ff';
@@ -131,16 +80,10 @@ function updateAuthButton() {
 function updateAdminButton() {
     const adminBtn = document.getElementById('adminToggleBtn');
     if (!adminBtn) return;
-
-    store.isAdmin = !!(store.currentUser && store.currentUser.email === ADMIN_EMAIL);
+    
+    store.isAdmin = !!(store.currentUser && store.currentUser.email === 'admin@cs2shop.com');
     localStorage.setItem('cs2_isAdmin', JSON.stringify(store.isAdmin));
-
     adminBtn.style.display = store.isAdmin ? 'flex' : 'none';
-}
-
-function closeAuthModal() {
-    const modal = document.getElementById('authModal');
-    if (modal) modal.style.display = 'none';
 }
 
 function logout() {
@@ -156,69 +99,10 @@ function logout() {
     alert('Вы вышли из системы');
 }
 
-async function renderUsersTable() {
-    const tbody = document.querySelector('#usersTable tbody');
-    if (!tbody) return;
-
-    await loadUsers();
-
-    tbody.innerHTML = (store.users || []).map(user => `
-        <tr>
-            <td>${user.id}</td>
-            <td>${user.name}</td>
-            <td>${user.email}</td>
-            <td>${new Date(user.registered_at).toLocaleString('ru-RU')}</td>
-            <td><span class="status-badge status-${user.status === 'active' ? 'active' : 'inactive'}">${user.status === 'active' ? 'АКТИВНЫЙ' : 'ЗАБЛОКИРОВАН'}</span></td>
-        </tr>
-    `).join('');
-}
-
-async function renderOrdersTable() {
-    const tbody = document.querySelector('#ordersTable tbody');
-    if (!tbody) return;
-
-    await loadOrders();
-
-    tbody.innerHTML = (store.orders || []).map(order => `
-        <tr>
-            <td>#${order.id}</td>
-            <td>${order.user_id}</td>
-            <td>$${Number(order.total).toFixed(2)}</td>
-            <td>${new Date(order.order_date).toLocaleString('ru-RU')}</td>
-            <td><span class="status-badge status-${order.status === 'pending' ? 'pending' : 'active'}">${order.status === 'pending' ? 'ОЖИДАНИЕ' : 'ЗАВЕРШЕНО'}</span></td>
-        </tr>
-    `).join('');
-}
-
-async function renderActivityLog() {
-    const logContainer = document.getElementById('activityLog');
-    if (!logContainer) return;
-
-    await loadActivity();
-
-    if (!store.activityLog.length) {
-        logContainer.innerHTML = '<p style="color: #999; text-align: center;">Нет активности</p>';
-        return;
-    }
-
-    logContainer.innerHTML = store.activityLog.slice(0, 50).map(log => `
-        <div class="activity-item">
-            <span class="activity-time">${new Date(log.timestamp).toLocaleString('ru-RU')}</span>
-            <span class="activity-text"><strong>${log.user_id || 'Гость'}</strong> - ${log.action}${log.details ? ': ' + log.details : ''}</span>
-        </div>
-    `).join('');
-}
-
-async function renderAdminPanel() {
-    await renderUsersTable();
-    await renderOrdersTable();
-    await renderActivityLog();
-}
-
 function renderProducts() {
     const grid = document.getElementById('productsGrid');
     if (!grid) return;
-
+    
     grid.innerHTML = products.map(product => `
         <div class="product-card">
             <div class="product-image">${product.emoji}</div>
@@ -236,8 +120,9 @@ function renderProducts() {
 
 function updateCartBadge() {
     const cartCount = document.getElementById('cart-count');
-    if (!cartCount) return;
-    cartCount.textContent = store.cart.reduce((sum, item) => sum + item.quantity, 0);
+    if (cartCount) {
+        cartCount.textContent = store.cart.reduce((sum, item) => sum + item.quantity, 0);
+    }
 }
 
 function renderCart() {
@@ -251,7 +136,7 @@ function renderCart() {
         return;
     }
 
-    const total = store.cart.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
+    const total = store.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
     cartContent.innerHTML = `
         <div class="cart-items">
@@ -259,7 +144,7 @@ function renderCart() {
                 <div class="cart-item">
                     <div class="cart-item-info">
                         <div class="cart-item-name">${item.name}</div>
-                        <div class="cart-item-price">$${Number(item.price).toFixed(2)}</div>
+                        <div class="cart-item-price">$${item.price}</div>
                     </div>
                     <div class="cart-item-quantity">
                         <button class="qty-btn" onclick="updateCartQuantity(${item.id}, ${item.quantity - 1})">-</button>
@@ -273,7 +158,7 @@ function renderCart() {
     `;
 
     cartTotal.innerHTML = `
-        <div class="total-amount">Итого: $${total.toFixed(2)}</div>
+        <div class="total-amount">Итого: $${total}</div>
         <button class="checkout-btn" onclick="checkout()">Оформить заказ</button>
     `;
 }
@@ -331,16 +216,17 @@ async function checkout() {
         return;
     }
 
-    const total = store.cart.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
-    const orderData = {
+    if (!supabase) return;
+
+    const total = store.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+    const { error } = await supabase.from('orders').insert([{
         user_id: store.currentUser.id,
         items: store.cart,
         total,
         order_date: new Date().toISOString(),
         status: 'pending'
-    };
-
-    const { error } = await supabase.from('orders').insert([orderData]);
+    }]);
 
     if (error) {
         console.error(error);
@@ -348,235 +234,293 @@ async function checkout() {
         return;
     }
 
-    await logActivity('Оформление заказа', `Заказ на сумму $${total.toFixed(2)}`);
+    await logActivity('Оформление заказа', `Заказ на сумму $${total}`);
     store.cart = [];
     localStorage.setItem('cs2_cart', JSON.stringify(store.cart));
     updateCartBadge();
     renderCart();
-    alert(`Спасибо за заказ! Сумма: $${total.toFixed(2)}`);
+    alert(`Спасибо за заказ! Сумма: $${total}`);
 }
 
-async function ensureAdminExists() {
-    const { data: existing, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', ADMIN_EMAIL)
-        .limit(1);
-
-    if (error) {
-        console.error(error);
-        return;
-    }
-
-    if (!existing || existing.length === 0) {
-        const { error: insertError } = await supabase.from('users').insert([
-            {
-                name: 'Администратор',
-                email: ADMIN_EMAIL,
-                password_hash: hashPassword('Admin123!@'),
-                status: 'active',
-                registered_at: new Date().toISOString()
-            }
-        ]);
-
-        if (insertError) {
-            console.error('Admin creation error:', insertError);
-        } else {
-            await logActivity('Инициализация', 'Админ аккаунт создан');
-        }
-    }
-}
-
-document.getElementById('signupPassword').addEventListener('input', function() {
-    const strength = checkPasswordStrength(this.value);
-    const strengthBar = document.getElementById('passwordStrength');
-    strengthBar.classList.remove('weak', 'medium', 'strong');
-
-    if (strength === 1) strengthBar.classList.add('weak');
-    else if (strength === 2) strengthBar.classList.add('medium');
-    else if (strength >= 3) strengthBar.classList.add('strong');
-});
-
-document.getElementById('signupConfirmPassword').addEventListener('input', function() {
-    const match = document.getElementById('signupPassword').value === this.value;
-    const matchSpan = document.getElementById('passwordMatch');
-    matchSpan.classList.remove('match', 'mismatch');
-    matchSpan.textContent = match ? '✓ Пароли совпадают' : '✗ Пароли не совпадают';
-    matchSpan.classList.add(match ? 'match' : 'mismatch');
-});
-
-document.getElementById('signupForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-
-    const name = document.getElementById('signupName').value.trim();
-    const email = document.getElementById('signupEmail').value.trim();
-    const password = document.getElementById('signupPassword').value;
-    const confirmPassword = document.getElementById('signupConfirmPassword').value;
-
-    if (!name || name.length < 2) {
-        alert('Имя должно быть минимум 2 символа');
-        return;
-    }
-
-    if (!validateEmail(email)) {
-        alert('Введите корректный email');
-        return;
-    }
-
-    if (password.length < 8) {
-        alert('Пароль должен быть минимум 8 символов');
-        return;
-    }
-
-    if (password !== confirmPassword) {
-        alert('Пароли не совпадают');
-        return;
-    }
-
-    if (checkPasswordStrength(password) < 2) {
-        alert('Пароль слишком слабый. Используйте буквы, цифры и спецсимволы');
-        return;
-    }
-
-    const { data: existingUsers, error: checkError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', email)
-        .limit(1);
-
-    if (checkError) {
-        console.error(checkError);
-        alert('Ошибка проверки email');
-        return;
-    }
-
-    if (existingUsers && existingUsers.length > 0) {
-        alert('Этот email уже зарегистрирован');
-        return;
-    }
-
-    const { error } = await supabase.from('users').insert([
-        {
-            name,
-            email,
-            password_hash: hashPassword(password),
-            status: 'active',
-            registered_at: new Date().toISOString()
-        }
-    ]);
-
-    if (error) {
-        console.error(error);
-        alert('Ошибка регистрации');
-        return;
-    }
-
-    await logActivity('Регистрация', `Новый пользователь: ${email}`);
-    alert('Регистрация успешна! Теперь войдите в систему');
-    switchTab('login');
-    this.reset();
-});
-
-document.getElementById('loginForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-
-    const email = document.getElementById('loginEmail').value.trim();
-    const password = document.getElementById('loginPassword').value;
+async function renderUsersTable() {
+    if (!supabase) return;
+    const tbody = document.querySelector('#usersTable tbody');
+    if (!tbody) return;
 
     const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('email', email)
-        .limit(1);
+        .order('registered_at', { ascending: false });
 
-    if (error || !data || data.length === 0) {
-        alert('Неверный email или пароль');
-        await logActivity('Ошибка входа', `Попытка входа на ${email}`);
+    if (error) {
+        console.error(error);
         return;
     }
 
-    const user = data[0];
+    tbody.innerHTML = (data || []).map(user => `
+        <tr>
+            <td>${user.id}</td>
+            <td>${user.name}</td>
+            <td>${user.email}</td>
+            <td>${new Date(user.registered_at).toLocaleString('ru-RU')}</td>
+            <td><span class="status-badge status-${user.status === 'active' ? 'active' : 'inactive'}">${user.status === 'active' ? 'АКТИВНЫЙ' : 'ЗАБЛОКИРОВАН'}</span></td>
+        </tr>
+    `).join('');
+}
 
-    if (user.password_hash !== hashPassword(password)) {
-        alert('Неверный email или пароль');
-        await logActivity('Ошибка входа', `Попытка входа на ${email}`);
+async function renderOrdersTable() {
+    if (!supabase) return;
+    const tbody = document.querySelector('#ordersTable tbody');
+    if (!tbody) return;
+
+    const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .order('order_date', { ascending: false });
+
+    if (error) {
+        console.error(error);
         return;
     }
 
-    store.currentUser = { id: user.id, name: user.name, email: user.email };
-    localStorage.setItem('cs2_currentUser', JSON.stringify(store.currentUser));
-    updateAuthButton();
-    updateAdminButton();
-    closeAuthModal();
-    await logActivity('Вход', `Вход пользователя ${email}`);
-    alert(`Добро пожаловать, ${user.name}!`);
-    this.reset();
-});
-
-const modal = document.getElementById('authModal');
-const authBtn = document.getElementById('auth-btn');
-const closeBtn = document.querySelector('.close');
-
-if (authBtn) {
-    authBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        if (store.currentUser) {
-            logout();
-        } else {
-            if (modal) modal.style.display = 'block';
-            document.getElementById('loginTab').classList.add('active');
-            document.getElementById('signupTab').classList.remove('active');
-        }
-    });
+    tbody.innerHTML = (data || []).map(order => `
+        <tr>
+            <td>#${order.id}</td>
+            <td>${order.user_id}</td>
+            <td>$${Number(order.total).toFixed(2)}</td>
+            <td>${new Date(order.order_date).toLocaleString('ru-RU')}</td>
+            <td><span class="status-badge status-${order.status === 'pending' ? 'pending' : 'active'}">${order.status === 'pending' ? 'ОЖИДАНИЕ' : 'ЗАВЕРШЕНО'}</span></td>
+        </tr>
+    `).join('');
 }
 
-if (closeBtn) {
-    closeBtn.addEventListener('click', closeAuthModal);
-}
+async function renderActivityLog() {
+    if (!supabase) return;
+    const logContainer = document.getElementById('activityLog');
+    if (!logContainer) return;
 
-window.addEventListener('click', (e) => {
-    if (e.target === modal) closeAuthModal();
-});
+    const { data, error } = await supabase
+        .from('activity')
+        .select('*')
+        .order('timestamp', { ascending: false })
+        .limit(50);
 
-document.getElementById('adminToggleBtn').addEventListener('click', async () => {
-    const panel = document.getElementById('adminPanel');
-    if (!panel) return;
-
-    panel.classList.toggle('active');
-    if (panel.classList.contains('active')) {
-        await renderAdminPanel();
+    if (error) {
+        console.error(error);
+        return;
     }
-});
 
-document.getElementById('closeAdmin').addEventListener('click', () => {
-    const panel = document.getElementById('adminPanel');
-    if (panel) panel.classList.remove('active');
-});
+    if (!data || data.length === 0) {
+        logContainer.innerHTML = '<p style="color: #999; text-align: center;">Нет активности</p>';
+        return;
+    }
 
-document.querySelectorAll('.admin-tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.admin-tab-content').forEach(tab => tab.classList.remove('active'));
+    logContainer.innerHTML = data.map(log => `
+        <div class="activity-item">
+            <span class="activity-time">${new Date(log.timestamp).toLocaleString('ru-RU')}</span>
+            <span class="activity-text"><strong>${log.user_id || 'Гость'}</strong> - ${log.action}${log.details ? ': ' + log.details : ''}</span>
+        </div>
+    `).join('');
+}
 
-        btn.classList.add('active');
-        const target = document.getElementById(btn.dataset.tab + 'Tab');
-        if (target) target.classList.add('active');
-    });
-});
+async function renderAdminPanel() {
+    await renderUsersTable();
+    await renderOrdersTable();
+    await renderActivityLog();
+}
 
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', () => {
+    initSupabase();
+    
     renderProducts();
     renderCart();
     updateCartBadge();
     updateAuthButton();
     updateAdminButton();
 
-    await ensureAdminExists();
-    await loadUsers();
-    await loadOrders();
-    await loadActivity();
-    updateAdminButton();
-    updateAuthButton();
+    // Регистрация
+    document.getElementById('signupPassword').addEventListener('input', function() {
+        const strength = checkPasswordStrength(this.value);
+        const strengthBar = document.getElementById('passwordStrength');
+        strengthBar.classList.remove('weak', 'medium', 'strong');
+        if (strength === 1) strengthBar.classList.add('weak');
+        else if (strength === 2) strengthBar.classList.add('medium');
+        else if (strength >= 3) strengthBar.classList.add('strong');
+    });
+
+    document.getElementById('signupConfirmPassword').addEventListener('input', function() {
+        const match = document.getElementById('signupPassword').value === this.value;
+        const matchSpan = document.getElementById('passwordMatch');
+        matchSpan.classList.remove('match', 'mismatch');
+        matchSpan.textContent = match ? '✓ Пароли совпадают' : '✗ Пароли не совпадают';
+        matchSpan.classList.add(match ? 'match' : 'mismatch');
+    });
+
+    document.getElementById('signupForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!supabase) {
+            alert('Ошибка подключения');
+            return;
+        }
+
+        const name = document.getElementById('signupName').value.trim();
+        const email = document.getElementById('signupEmail').value.trim();
+        const password = document.getElementById('signupPassword').value;
+        const confirmPassword = document.getElementById('signupConfirmPassword').value;
+
+        if (!name || name.length < 2) {
+            alert('Имя должно быть минимум 2 символа');
+            return;
+        }
+
+        if (!validateEmail(email)) {
+            alert('Введите корректный email');
+            return;
+        }
+
+        if (password.length < 8) {
+            alert('Пароль должен быть минимум 8 символов');
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            alert('Пароли не совпадают');
+            return;
+        }
+
+        if (checkPasswordStrength(password) < 2) {
+            alert('Пароль слишком слабый');
+            return;
+        }
+
+        const { data: existing } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', email)
+            .limit(1);
+
+        if (existing && existing.length > 0) {
+            alert('Этот email уже зарегистрирован');
+            return;
+        }
+
+        const { error } = await supabase.from('users').insert([{
+            name,
+            email,
+            password_hash: hashPassword(password),
+            status: 'active',
+            registered_at: new Date().toISOString()
+        }]);
+
+        if (error) {
+            console.error(error);
+            alert('Ошибка регистрации');
+            return;
+        }
+
+        await logActivity('Регистрация', `Новый пользователь: ${email}`);
+        alert('Регистрация успешна! Теперь войдите в систему');
+        switchTab('login');
+        document.getElementById('signupForm').reset();
+    });
+
+    // Вход
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!supabase) {
+            alert('Ошибка подключения');
+            return;
+        }
+
+        const email = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value;
+
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email)
+            .limit(1);
+
+        if (error || !data || data.length === 0) {
+            alert('Неверный email или пароль');
+            await logActivity('Ошибка входа', `Попытка входа на ${email}`);
+            return;
+        }
+
+        const user = data[0];
+
+        if (user.password_hash !== hashPassword(password)) {
+            alert('Неверный email или пароль');
+            await logActivity('Ошибка входа', `Попытка входа на ${email}`);
+            return;
+        }
+
+        store.currentUser = { id: user.id, name: user.name, email: user.email };
+        localStorage.setItem('cs2_currentUser', JSON.stringify(store.currentUser));
+        updateAuthButton();
+        updateAdminButton();
+        closeAuthModal();
+        await logActivity('Вход', `Вход пользователя ${email}`);
+        alert(`Добро пожаловать, ${user.name}!`);
+        document.getElementById('loginForm').reset();
+    });
+
+    // Кнопка входа
+    const authBtn = document.getElementById('auth-btn');
+    if (authBtn) {
+        authBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (store.currentUser) {
+                logout();
+            } else {
+                const modal = document.getElementById('authModal');
+                if (modal) modal.style.display = 'block';
+                document.getElementById('loginTab').classList.add('active');
+                document.getElementById('signupTab').classList.remove('active');
+            }
+        });
+    }
+
+    const closeBtn = document.querySelector('.close');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeAuthModal);
+    }
+
+    window.addEventListener('click', (e) => {
+        const modal = document.getElementById('authModal');
+        if (e.target === modal) closeAuthModal();
+    });
+
+    // Админ панель
+    const adminToggleBtn = document.getElementById('adminToggleBtn');
+    if (adminToggleBtn) {
+        adminToggleBtn.addEventListener('click', async () => {
+            const panel = document.getElementById('adminPanel');
+            if (!panel) return;
+            panel.classList.toggle('active');
+            if (panel.classList.contains('active')) {
+                await renderAdminPanel();
+            }
+        });
+    }
+
+    const closeAdminBtn = document.getElementById('closeAdmin');
+    if (closeAdminBtn) {
+        closeAdminBtn.addEventListener('click', () => {
+            const panel = document.getElementById('adminPanel');
+            if (panel) panel.classList.remove('active');
+        });
+    }
+
+    document.querySelectorAll('.admin-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.admin-tab-content').forEach(tab => tab.classList.remove('active'));
+            btn.classList.add('active');
+            const target = document.getElementById(btn.dataset.tab + 'Tab');
+            if (target) target.classList.add('active');
+        });
+    });
 });
 
 window.addEventListener('beforeunload', () => {
