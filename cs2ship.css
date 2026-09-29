@@ -21,7 +21,6 @@ body {
     line-height: 1.6;
 }
 
-/* Навигационная панель */
 .navbar {
     background-color: var(--cs2-darker);
     padding: 1rem 0;
@@ -84,7 +83,6 @@ body {
     display: inline-block;
 }
 
-/* Модальное окно */
 .modal {
     display: none;
     position: fixed;
@@ -103,7 +101,7 @@ body {
     padding: 2rem;
     border: 2px solid var(--cs2-cyan);
     width: 90%;
-    max-width: 400px;
+    max-width: 500px;
     border-radius: 10px;
     box-shadow: 0 0 30px rgba(0, 212, 255, 0.5);
     animation: slideIn 0.3s ease;
@@ -185,17 +183,9 @@ body {
     background-color: #333;
 }
 
-.password-strength.weak {
-    background-color: var(--cs2-red);
-}
-
-.password-strength.medium {
-    background-color: var(--cs2-orange);
-}
-
-.password-strength.strong {
-    background-color: var(--cs2-gold);
-}
+.password-strength.weak { background-color: var(--cs2-red); }
+.password-strength.medium { background-color: var(--cs2-orange); }
+.password-strength.strong { background-color: var(--cs2-gold); }
 
 .password-match {
     font-size: 0.8rem;
@@ -203,13 +193,8 @@ body {
     display: block;
 }
 
-.password-match.match {
-    color: var(--cs2-gold);
-}
-
-.password-match.mismatch {
-    color: var(--cs2-red);
-}
+.password-match.match { color: var(--cs2-gold); }
+.password-match.mismatch { color: var(--cs2-red); }
 
 .tab-switch {
     text-align: center;
@@ -229,7 +214,6 @@ body {
     text-shadow: 0 0 10px rgba(0, 212, 255, 0.8);
 }
 
-/* Кнопки */
 .btn {
     padding: 0.8rem 1.5rem;
     border: none;
@@ -254,26 +238,9 @@ body {
     transform: scale(1.02);
 }
 
-.btn-secondary {
-    background-color: var(--cs2-orange);
-    color: white;
-}
-
-.btn-secondary:hover {
-    background-color: var(--cs2-red);
-    box-shadow: 0 0 20px rgba(230, 0, 18, 0.5);
-}
-
-.btn-small {
-    padding: 0.5rem 1rem;
-    font-size: 0.9rem;
-    width: auto;
-}
-
-/* Герой секция */
 .hero {
     background: linear-gradient(135deg, var(--cs2-darker) 0%, var(--cs2-light) 100%);
-    background-image: 
+    background-image:
         linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(255, 107, 53, 0.1) 100%),
         linear-gradient(135deg, var(--cs2-darker) 0%, var(--cs2-light) 100%);
     padding: 100px 20px;
@@ -318,14 +285,12 @@ body {
     text-shadow: 0 0 10px rgba(255, 214, 10, 0.5);
 }
 
-/* Контейнер */
 .container {
     max-width: 1200px;
     margin: 0 auto;
     padding: 0 20px;
 }
 
-/* Секция товаров */
 .products-section {
     padding: 4rem 20px;
     background-color: var(--cs2-dark);
@@ -421,7 +386,6 @@ body {
     box-shadow: 0 0 15px rgba(255, 214, 10, 0.5);
 }
 
-/* Секция корзины */
 .cart-section {
     padding: 4rem 20px;
     background-color: var(--cs2-dark);
@@ -550,8 +514,6 @@ body {
     box-shadow: 0 0 20px rgba(230, 0, 18, 0.5);
 }
 
-/* ===== АДМИН ПАНЕЛЬ ИСПРАВЛЕНИЯ ===== */
-
 .admin-panel {
     position: fixed;
     right: -400px;
@@ -676,6 +638,7 @@ body {
     border-bottom: 1px solid var(--cs2-light);
     color: #ddd;
     font-size: 0.9rem;
+    vertical-align: top;
 }
 
 .admin-table tr:hover {
@@ -734,7 +697,6 @@ body {
     color: #ccc;
 }
 
-/* Кнопка админ панели */
 .admin-toggle-btn {
     display: flex;
     align-items: center;
@@ -762,7 +724,19 @@ body {
     transform: scale(1.1);
 }
 
-/* Адаптивность */
+.export-btn {
+    width: 100%;
+    margin-top: 1rem;
+    padding: 0.8rem;
+    border: none;
+    border-radius: 5px;
+    background: var(--cs2-cyan);
+    color: var(--cs2-dark);
+    cursor: pointer;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
 @media (max-width: 768px) {
     .nav-menu {
         gap: 1rem;
